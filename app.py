@@ -1,88 +1,83 @@
 import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
-st.set_page_config(page_title="DEKO Zaag-Transformaties", layout="wide")
+# Pagina instellingen
+st.set_page_config(page_title="DEKO Zaag Tool", layout="wide")
 
-# --- DATA: ALLE VORMEN VAN DEKO.NU ---
-TRANSFORMATIES = {
-    "Strippen (2-zijdig)": {"basis": "Steen", "sneden": ["links", "rechts"], "omschrijving": "Haalt 2 strippen uit 1 volle steen."},
-    "Strippen (1-zijdig)": {"basis": "Steen", "sneden": ["links"], "omschrijving": "Haalt 1 strip uit de strek."},
-    "Hoeken": {"basis": "Hoek", "sneden": ["links", "onder"], "omschrijving": "Standaard L-vormige hoekstrip."},
-    "Hoeken plat (kopbakje)": {"basis": "Hoek", "sneden": ["links", "rechts", "onder"], "omschrijving": "Hoek met extra inkorting."},
-    "Sparren": {"basis": "Steen", "sneden": ["boven", "onder"], "omschrijving": "Zagen van de strekkanten (hoogte aanpassing)."},
-    "Afkorten": {"basis": "Steen", "sneden": ["links", "rechts"], "omschrijving": "De steen op lengte zagen."},
-    "Koppen": {"basis": "Steen", "sneden": ["links"], "omschrijving": "Zagen van de kopse kant."},
-    "Kopstrippen": {"basis": "Steen", "sneden": ["kop_strip"], "omschrijving": "Dunne strips van de kopse kant."},
-    "Zolen / Bakjes": {"basis": "Hoek", "sneden": ["onder"], "omschrijving": "Transformeren naar een U-vorm of zool."},
-    "Kimstenen / Ytong": {"basis": "Blok", "sneden": ["onder", "boven"], "omschrijving": "Grote blokken op maat zagen."}
-}
+# Logo en Titel
+LOGO_URL = "https://raw.githubusercontent.com/DennisDeko/teken-tool/main/deko_logo.jpg"
+col_l, col_r = st.columns([1, 4])
+with col_l:
+    try:
+        st.image(LOGO_URL, width=150)
+    except:
+        st.write("DEKO LOGO")
+with col_r:
+    st.title("DEKO Transformatie Editor")
 
 # --- SIDEBAR ---
-st.sidebar.image("https://raw.githubusercontent.com/DennisDeko/teken-tool/main/deko_logo.jpg", width=150)
-st.sidebar.header("Selecteer Transformatie")
-keuze = st.sidebar.selectbox("Kies type:", list(TRANSFORMATIES.keys()))
+st.sidebar.header("Configuratie")
+vorm_type = st.sidebar.selectbox("Basisvorm", ["Waalformaat Steen", "Waalformaat Hoek"])
 
-st.sidebar.divider()
-st.sidebar.write(f"**Info:** {TRANSFORMATIES[keuze]['omschrijving']}")
+# Standaardmaten
+L, B, H = 210, 100, 50
+D = 23 # Dikte strip bij hoek
 
-with st.sidebar.expander("Maten & Zaagblad", expanded=True):
-    l_base = st.number_input("Basis Lengte (mm)", value=210)
-    b_base = st.number_input("Basis Breedte (mm)", value=100)
-    h_base = st.number_input("Basis Hoogte (mm)", value=50)
-    dikte_zaag = st.slider("Zaagblad dikte (mm)", 0.0, 5.0, 3.0)
-
-# --- ZAAGLIJNEN GENEREREN ---
-actieve_sneden = {}
-st.sidebar.subheader("Zaagmaten")
-for kant in TRANSFORMATIES[keuze]["sneden"]:
-    label = f"Maat {kant.capitalize()} (mm)"
-    actieve_sneden[kant] = st.sidebar.number_input(label, min_value=1, max_value=210, value=23)
+with st.sidebar.expander("Zaag Instellingen", expanded=True):
+    zaag_dikte = st.number_input("Zaagblad dikte (mm)", 0.0, 10.0, 3.0)
+    
+    st.write("---")
+    links_actief = st.checkbox("Zaagsnede Links", value=True)
+    if links_actief:
+        maat_links = st.number_input("Dikte Strip Links (mm)", 1, L, 23)
+        
+    rechts_actief = st.checkbox("Zaagsnede Rechts")
+    if rechts_actief:
+        maat_rechts = st.number_input("Dikte Strip Rechts (mm)", 1, L, 23)
 
 # --- VISUALISATIE ---
-st.title(f"Plan: {keuze}")
+fig, ax = plt.subplots(figsize=(10, 5))
 
-fig, ax = plt.subplots(figsize=(10, 6))
-
-# Basis tekenen
-if TRANSFORMATIES[keuze]["basis"] == "Hoek":
-    d_hoek = 23
-    points = np.array([[0,0], [l_base,0], [l_base,d_hoek], [d_hoek,d_hoek], [d_hoek,b_base], [0,b_base], [0,0]])
-    ax.plot(points[:,0], points[:,1], color='black', linewidth=2)
-    ax.fill(points[:,0], points[:,1], color='lightgray', alpha=0.2)
+# Teken Basis
+if vorm_type == "Waalformaat Hoek":
+    # L-vorm tekenen
+    pts = np.array([[0,0], [L,0], [L,D], [D,D], [D,B], [0,B], [0,0]])
+    ax.plot(pts[:,0], pts[:,1], color='black', lw=2)
+    ax.fill(pts[:,0], pts[:,1], color='lightgray', alpha=0.1)
 else:
-    rect = plt.Rectangle((0, 0), l_base, b_base, fill=None, edgecolor='black', linewidth=2)
+    # Steen tekenen
+    rect = plt.Rectangle((0,0), L, B, fill=None, edgecolor='black', lw=2)
     ax.add_patch(rect)
 
-# Zaaglijnen tekenen met arcering
-def draw_saw_effect(pos, side):
-    if side == "links":
-        # Product
-        ax.add_patch(plt.Rectangle((0, 0), pos, b_base, color='green', alpha=0.3))
-        # Zaaggat
-        ax.add_patch(plt.Rectangle((pos, 0), dikte_zaag, b_base, color='red', alpha=0.7))
-        # Afval
-        ax.add_patch(plt.Rectangle((pos + dikte_zaag, 0), l_base - pos - dikte_zaag, b_base, hatch='///', fill=False, color='gray'))
-    elif side == "rechts":
-        # Product aan rechterkant
-        ax.add_patch(plt.Rectangle((l_base - pos, 0), pos, b_base, color='green', alpha=0.3))
-        # Zaaggat
-        ax.add_patch(plt.Rectangle((l_base - pos - dikte_zaag, 0), dikte_zaag, b_base, color='red', alpha=0.7))
-        # Afval (wordt complexer bij combi, maar we tekenen het gat)
-        ax.text(l_base - pos/2, b_base/2, f"{pos}", ha='center', weight='bold')
+# Zaagfuncties
+def teken_snede(pos, kant):
+    if kant == "links":
+        # Groen product
+        ax.add_patch(plt.Rectangle((0,0), pos, B, color='green', alpha=0.3))
+        # Rood zaaggat
+        ax.add_patch(plt.Rectangle((pos, 0), zaag_dikte, B, color='red', alpha=0.6))
+        # Arcering afval
+        ax.add_patch(plt.Rectangle((pos + zaag_dikte, 0), L - (pos+zaag_dikte), B, hatch='///', fill=False, color='gray', alpha=0.3))
+        ax.text(pos/2, B/2, f"{pos}", ha='center', weight='bold')
+    
+    if kant == "rechts":
+        ax.add_patch(plt.Rectangle((L-pos, 0), pos, B, color='green', alpha=0.3))
+        ax.add_patch(plt.Rectangle((L-pos-zaag_dikte, 0), zaag_dikte, B, color='red', alpha=0.6))
+        ax.text(L-pos/2, B/2, f"{pos}", ha='center', weight='bold')
 
-for s_kant, s_pos in actieve_sneden.items():
-    draw_saw_effect(s_pos, s_kant)
+if links_actief: teken_snede(maat_links, "links")
+if rechts_actief: teken_snede(maat_rechts, "rechts")
 
 ax.set_aspect('equal')
 ax.axis('off')
 st.pyplot(fig)
 
-# --- TABEL ---
-st.divider()
-st.subheader("📋 Productie Overzicht")
-data = {"Onderdeel": ["Basis", "Zaagblad"], "Waarde": [f"{l_base}x{b_base}x{h_base} mm", f"{dikte_zaag} mm"]}
-for k, v in actieve_sneden.items():
-    data["Onderdeel"].append(f"Zaagsnede {k}")
-    data["Waarde"].append(f"{v} mm")
-st.table(data)
+# Tabel met resultaten
+st.subheader("Resultaat Maten")
+res_data = {
+    "Omschrijving": ["Lengte", "Breedte", "Hoogte", "Zaagverlies"],
+    "Maat (mm)": [L, B, H, zaag_dikte]
+}
+st.table(pd.DataFrame(res_data))
