@@ -82,6 +82,8 @@ def show_visuals(vertices, indices, grond_poly, pos_x, pos_y):
             
         ax2d.set_aspect('equal')
         ax2d.axis('off')
+        
+        # Gebruik clear_figure=True om overlappen/verdwijnen te voorkomen
         st.pyplot(fig2d, clear_figure=True)
 
     with col_right:
@@ -122,7 +124,9 @@ def show_visuals(vertices, indices, grond_poly, pos_x, pos_y):
             margin=dict(l=0, r=0, b=0, t=0),
             height=500
         )
-        st.plotly_chart(fig3d, use_container_width=True)
+        
+        # Opgelost: width="stretch" in plaats van use_container_width=True
+        st.plotly_chart(fig3d, width="stretch")
 
 # Start de visualisatie
 show_visuals(vertices, indices, grond_poly, pos_x, pos_y)
@@ -134,6 +138,8 @@ if pos_x or pos_y:
     overzicht = []
     for i, x in enumerate(pos_x): overzicht.append({"ID": f"X{i+1}", "Positie (mm)": x, "Type": "Verticaal"})
     for i, y in enumerate(pos_y): overzicht.append({"ID": f"Y{i+1}", "Positie (mm)": y, "Type": "Horizontaal"})
-    st.dataframe(overzicht, use_container_width=True)
+    
+    # Opgelost: width="stretch" in plaats van use_container_width=True
+    st.dataframe(overzicht, width="stretch")
 else:
     st.info("Voeg zaaglijnen toe in de sidebar om de details te bekijken.")
