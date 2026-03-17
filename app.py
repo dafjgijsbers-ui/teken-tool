@@ -2,108 +2,97 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import numpy as np
-import pandas as pd
 
-st.set_page_config(page_title="DEKO Waalformaat Tool", layout="wide")
+st.set_page_config(page_title="DEKO Zaag-Editor", layout="wide")
 
-# --- LOGO EN TITEL ---
-LOGO_URL = "https://raw.githubusercontent.com/DennisDeko/teken-tool/main/deko_logo.jpg"
-
-col_logo, col_titel = st.columns([1, 3])
-with col_logo:
-    st.image(LOGO_URL, width=200) 
-with col_titel:
-    st.title("Waalformaat Zaag-Editor (mm)")
-
-st.divider()
-
-# --- STANDAARD WAALFORMAAT WAARDES ---
+# --- CONFIGURATIE ---
 L_WAAL = 210.0
 B_WAAL = 100.0
 H_WAAL = 50.0
 
 # --- SIDEBAR ---
-st.sidebar.header("Baksteen Type: Waalformaat")
-st.sidebar.info(f"Standaardmaten: {int(L_WAAL)}x{int(B_WAAL)}x{int(H_WAAL)} mm")
+st.sidebar.header("Product Keuze")
+type_keuze = st.sidebar.radio("Selecteer basisvorm:", ["Steen", "Hoek"])
 
-with st.sidebar.expander("Zaagsnedes Aanbrengen", expanded=True):
-    st.write("🟢 **Verticale Zaagsnede (X)**")
-    zaag_x = st.number_input("Positie vanaf links (mm)", min_value=0.0, max_value=L_WAAL, value=150.0)
+st.sidebar.divider()
+
+with st.sidebar.expander("Instellingen Zaagsnede", expanded=True):
+    zaag_dikte = st.number_input("Dikte zaagblad (mm)", min_value=0.0, value=3.0, step=0.5)
     
-    st.write("🔵 **Horizontale Zaagsnede (Y)**")
-    zaag_y = st.number_input("Positie vanaf onder (mm)", min_value=0.0, max_value=B_WAAL, value=B_WAAL)
+    st.write("---")
+    st.write("🟢 **Strips van de strek (L1)**")
+    strip_maat = st.number_input("Gewenste strip dikte (mm)", min_value=1.0, max_value=45.0, value=23.0)
+    dubbel_zagen = st.checkbox("Aan beide kanten zagen", value=True)
 
-# --- BEREKENING RESTSTUK ---
-# We gaan ervan uit dat het stuk linksonder (0,0 tot zaag_x, zaag_y) het product is.
-overgebleven_breedte = zaag_x
-overgebleven_diepte = zaag_y
+# --- LOGICA ---
+# We berekenen de lijnen
+# Strip 1: van 0 tot strip_maat
+# Zaaggat 1: van strip_maat tot strip_maat + zaag_dikte
+# Middenstuk: wat er overblijft
+# Zaaggat 2 (indien dubbel): voor de tweede strip aan het einde
 
 # --- VISUALISATIE ---
-col1, col2 = st.columns(2)
+st.title(f"Zaagplan: Waalformaat {type_keuze}")
+
+col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.subheader("2D Zaagplan (Arcering = Afval)")
-    fig1, ax1 = plt.subplots()
+    fig, ax = plt.subplots(figsize=(10, 5))
     
-    # 1. De volledige steen (omtrek)
+    # Basis steen tekenen
     omtrek = plt.Rectangle((0, 0), L_WAAL, B_WAAL, fill=None, edgecolor='black', linewidth=1)
-    ax1.add_patch(omtrek)
+    ax.add_patch(omtrek)
     
-    # 2. Het deel dat WEG gaat (Arcering)
-    # Rechts van de verticale zaagsnede
-    afval_rechts = plt.Rectangle((zaag_x, 0), L_WAAL - zaag_x, B_WAAL, 
-                                  hatch='///', fill=False, edgecolor='gray', alpha=0.5)
-    ax1.add_patch(afval_rechts)
+    # --- STRIP 1 (Links) ---
+    # Het product
+    ax.add_patch(plt.Rectangle((0, 0), strip_maat, B_WAAL, color='green', alpha=0.3))
+    ax.text(strip_maat/2, B_WAAL/2, f"{strip_maat}\nmm", ha='center', va='center', weight='bold')
     
-    # Boven de horizontale zaagsnede (voor het resterende deel)
-    afval_boven = plt.Rectangle((0, zaag_y), zaag_x, B_WAAL - zaag_y, 
-                                 hatch='\\\\\\', fill=False, edgecolor='gray', alpha=0.5)
-    ax1.add_patch(afval_boven)
-    
-    # 3. Het product (Duidelijke lijnen)
-    ax1.plot([0, zaag_x], [0, 0], color='green', linewidth=3) # Onder
-    ax1.plot([0, 0], [0, zaag_y], color='blue', linewidth=3)   # Links
-    ax1.plot([zaag_x, zaag_x], [0, zaag_y], color='red', linestyle='--') # Zaaglijn X
-    ax1.plot([0, zaag_x], [zaag_y, zaag_y], color='red', linestyle='--') # Zaaglijn Y
+    # Het zaaggat (rood/wit gestreept of rood)
+    ax.add_patch(plt.Rectangle((strip_maat, 0), zaag_dikte, B_WAAL, color='red', alpha=0.8))
+    ax.text(strip_maat + (zaag_dikte/2), B_WAAL + 10, f"{zaag_dikte}", color='red', ha='center', fontsize=8)
 
-    # Maten bij de zaaglijnen
-    ax1.text(zaag_x/2, -10, f"{int(zaag_x)} mm", color='green', weight='bold', ha='center')
-    ax1.text(-15, zaag_y/2, f"{int(zaag_y)} mm", color='blue', weight='bold', va='center', rotation=90)
+    # --- STRIP 2 (Rechts, indien aangevinkt) ---
+    midden_start = strip_maat + zaag_dikte
+    midden_eind = L_WAAL
+    
+    if dubbel_zagen:
+        midden_eind = L_WAAL - strip_maat - zaag_dikte
+        # Tweede strip aan de rechterkant
+        ax.add_patch(plt.Rectangle((L_WAAL - strip_maat, 0), strip_maat, B_WAAL, color='green', alpha=0.3))
+        ax.text(L_WAAL - (strip_maat/2), B_WAAL/2, f"{strip_maat}\nmm", ha='center', va='center', weight='bold')
+        
+        # Tweede zaaggat
+        ax.add_patch(plt.Rectangle((L_WAAL - strip_maat - zaag_dikte, 0), zaag_dikte, B_WAAL, color='red', alpha=0.8))
+        ax.text(L_WAAL - strip_maat - (zaag_dikte/2), B_WAAL + 10, f"{zaag_dikte}", color='red', ha='center', fontsize=8)
 
-    ax1.set_xlim(-30, L_WAAL + 30); ax1.set_ylim(-30, B_WAAL + 30); ax1.set_aspect('equal')
-    ax1.axis('off')
-    st.pyplot(fig1)
+    # --- MIDDENSTUK (Afval) ---
+    afval_breedte = midden_eind - midden_start
+    if afval_breedte > 0:
+        ax.add_patch(plt.Rectangle((midden_start, 0), afval_breedte, B_WAAL, 
+                                   hatch='///', fill=False, edgecolor='gray', alpha=0.4))
+        ax.text(midden_start + (afval_breedte/2), B_WAAL/2, "REST", ha='center', color='gray')
+
+    # Opmaak
+    ax.set_xlim(-20, L_WAAL + 20)
+    ax.set_ylim(-20, B_WAAL + 40)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    st.pyplot(fig)
 
 with col2:
-    st.subheader("3D Resultaat")
-    fig2 = plt.figure()
-    ax2 = fig2.add_subplot(111, projection='3d')
+    st.subheader("📋 Productie Info")
+    st.write(f"**Basismaat:** {int(L_WAAL)} x {int(B_WAAL)} x {int(H_WAAL)} mm")
+    st.write(f"**Zaagverlies:** {zaag_dikte} mm per snede")
     
-    # Teken alleen het overgebleven deel in 3D
-    def draw_box(ax, x, y, z, dx, dy, dz, color, alpha):
-        v = np.array([[x,y,z], [x+dx,y,z], [x+dx,y+dy,z], [x,y+dy,z],
-                      [x,y,z+dz], [x+dx,y,z+dz], [x+dx,y+dy,z+dz], [x,y+dy,z+dz]])
-        indices = [[0,1,2,3], [4,5,6,7], [0,1,5,4], [1,2,6,5], [2,3,7,6], [3,0,4,7]]
-        faces = [[v[i] for i in idx] for idx in indices]
-        ax.add_collection3d(Poly3DCollection(faces, facecolors=color, linewidths=1, edgecolors='blue', alpha=alpha))
-
-    # Het product
-    draw_box(ax2, 0, 0, 0, zaag_x, zaag_y, H_WAAL, 'cyan', 0.6)
+    st.info(f"Je haalt **{'2 strips' if dubbel_zagen else '1 strip'}** uit deze steen.")
     
-    # De reststukken (heel licht transparant om te laten zien wat er was)
-    draw_box(ax2, 0, 0, 0, L_WAAL, B_WAAL, H_WAAL, 'gray', 0.05)
+    rest_maat = L_WAAL - (strip_maat * (2 if dubbel_zagen else 1)) - (zaag_dikte * (2 if dubbel_zagen else 1))
+    st.warning(f"Resterend afvalstuk: **{round(rest_maat, 1)} mm**")
 
-    ax2.set_xlim(0, L_WAAL); ax2.set_ylim(0, L_WAAL); ax2.set_zlim(0, L_WAAL)
-    ax2.view_init(elev=20, azim=-35)
-    st.pyplot(fig2)
-
-# --- OVERZICHT ---
-st.divider()
-st.subheader("📋 Zaaginstructie")
-col_a, col_b = st.columns(2)
-with col_a:
-    st.metric("Product Lengte", f"{int(zaag_x)} mm")
-    st.metric("Product Breedte", f"{int(zaag_y)} mm")
-with col_b:
-    st.metric("Afval Lengte", f"{int(L_WAAL - zaag_x)} mm")
-    st.metric("Afval Breedte", f"{int(B_WAAL - zaag_y)} mm")
+    if type_keuze == "Hoek":
+        st.write("---")
+        st.write("📐 **Hoek-specificatie:**")
+        st.write("L-zijde 1: 210 mm")
+        st.write("L-zijde 2: 100 mm")
+        st.caption("De strips worden uit de lange zijdes gezaagd.")
