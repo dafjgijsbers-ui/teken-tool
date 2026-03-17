@@ -1,82 +1,149 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import plotly.graph_objects as go
 import numpy as np
-import pandas as pd
 
+# --- CONFIGURATIE ---
 st.set_page_config(page_title="DEKO Maten Tool Pro", layout="wide")
 
 # --- LOGO EN TITEL ---
 LOGO_URL = "https://raw.githubusercontent.com/DennisDeko/teken-tool/main/deko_logo.jpg"
-col_logo, col_titel = st.columns([1, 3])
+col_logo, col_titel = st.columns([1, 4])
 with col_logo:
-    st.image(LOGO_URL, width=200) 
+    st.image(LOGO_URL, width=150)
 with col_titel:
-    st.title("DEKO Maatwerk Editor - 3D Vlakken")
+    st.title("DEKO Maatwerk Editor Pro")
+    st.caption("Interactieve 3D Visualisatie & Zaagplan")
 
-# --- SIDEBAR ---
-vorm_type = st.sidebar.selectbox("Kies type", ["Steen", "Hoek"])
-zaag_dikte = st.sidebar.slider("Dikte zaagblad (mm)", 0.0, 5.0, 3.0)
+# --- SIDEBAR: INPUT ---
+st.sidebar.header("📐 Instellingen")
+vorm_type = st.sidebar.selectbox("Type Steen", ["Steen (Rechthoek)", "Hoek (L-vorm)"])
+zaag_dikte = st.sidebar.number_input("Zaagblad dikte (mm)", 0.0, 10.0, 3.0, step=0.5)
 
 with st.sidebar.expander("Basis Afmetingen", expanded=True):
-    if vorm_type == "Steen":
-        l1, l2, h = st.number_input("L1", value=210.0), st.number_input("L2", value=100.0), st.number_input("H", value=50.0)
-        dikte = 0.0
-        grond_poly = np.array([[0,0], [l1,0], [l1,l2], [0,l2]])
-        vlak_indices = [[0,1,2,3], [4,5,6,7], [0,1,5,4], [1,2,6,5], [2,3,7,6], [3,0,4,7]]
-    else:
-        l1, l2, h = st.number_input("L1", value=210.0), st.number_input("L2", value=100.0), st.number_input("H", value=50.0)
-        dikte = st.number_input("Dikte D", value=23.0)
-        grond_poly = np.array([[0,0], [l1,0], [l1,dikte], [dikte,dikte], [dikte,l2], [0,l2]])
-        vlak_indices = [[0,1,2,3,4,5], [6,7,8,9,10,11], [0,1,7,6], [1,2,8,7], [2,3,9,8], [3,4,10,9], [4,5,11,10], [5,0,6,11]]
-
-with st.sidebar.expander("Zaaglijnen", expanded=True):
-    ax = st.slider("Aantal X-snedes", 0, 4, 0)
-    pos_x = [st.number_input(f"X{i+1}", value=23.0 if i==0 else l1-23, key=f"x{i}") for i in range(ax)]
-    ay = st.slider("Aantal Y-snedes", 0, 4, 0)
-    pos_y = [st.number_input(f"Y{i+1}", value=23.0 if i==0 else l2-23, key=f"y{i}") for i in range(ay)]
-
-# --- VISUALISATIE ---
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("2D Plan")
-    fig1, ax1 = plt.subplots()
-    ax1.add_patch(plt.Polygon(grond_poly, facecolor='gray', alpha=0.1, edgecolor='black'))
+    l1 = st.number_input("Lengte L1 (mm)", value=210.0)
+    l2 = st.number_input("Breedte L2 (mm)", value=100.0)
+    h = st.number_input("Hoogte H (mm)", value=50.0)
     
+    dikte = 0.0
+    if vorm_type == "Hoek (L-vorm)":
+        dikte = st.number_input("Dikte D (mm)", value=23.0)
+        # Validatie: Dikte mag niet groter zijn dan L1 of L2
+        if dikte >= l1 or dikte >= l2:
+            st.error("Dikte D moet kleiner zijn dan L1 en L2!")
+
+with st.sidebar.expander("✂️ Zaaglijnen (X & Y)", expanded=True):
+    # Dynamische kolommen voor X-snedes
+    ax = st.slider("Aantal X-snedes", 0, 4, 1)
+    cols_x = st.columns(2)
+    pos_x = []
+    for i in range(ax):
+        with cols_x[i % 2]:
+            val = st.number_input(f"X{i+1}", value=23.0 + (i*50), key=f"x{i}")
+            pos_x.append(val)
+            if val > l1:
+                st.warning(f"X{i+1} valt buiten L1!")
+
+    st.divider()
+
+    # Dynamische kolommen voor Y-snedes
+    ay = st.slider("Aantal Y-snedes", 0, 4, 0)
+    cols_y = st.columns(2)
+    pos_y = []
+    for i in range(ay):
+        with cols_y[i % 2]:
+            val = st.number_input(f"Y{i+1}", value=23.0 + (i*50), key=f"y{i}")
+            pos_y.append(val)
+            if val > l2:
+                st.warning(f"Y{i+1} valt buiten L2!")
+
+# --- LOGICA: GEOMETRIE DEFINITIES ---
+if vorm_type == "Steen (Rechthoek)":
+    # 8 hoekpunten van een box
+    vertices = np.array([
+        [0,0,0], [l1,0,0], [l1,l2,0], [0,l2,0],
+        [0,0,h], [l1,0,h], [l1,l2,h], [0,l2,h]
+    ])
+    indices = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 1, 2, 6, 1, 6, 5, 2, 3, 7, 2, 7, 6, 3, 0, 4, 3, 4, 7]
+    grond_poly = np.array([[0,0], [l1,0], [l1,l2], [0,l2]])
+else:
+    # L-vorm hoekpunten (6 onder, 6 boven)
+    v_onder = [[0,0,0], [l1,0,0], [l1,dikte,0], [dikte,dikte,0], [dikte,l2,0], [0,l2,0]]
+    v_boven = [[p[0], p[1], h] for p in v_onder]
+    vertices = np.array(v_onder + v_boven)
+    # Simpele triangulatie voor L-vorm (handmatig voor Mesh3d)
+    indices = [0,1,2, 0,2,3, 0,3,5, 3,4,5, 6,7,8, 6,8,9, 6,9,11, 9,10,11] # Bodem & Top (versimpeld)
+    grond_poly = np.array([[p[0], p[1]] for p in v_onder])
+
+# --- VISUALISATIE: 2D PLAN (MATPLOTLIB) ---
+col_left, col_right = st.columns([1, 1])
+
+with col_left:
+    st.subheader("📋 2D Technisch Plan")
+    fig1, ax1 = plt.subplots(figsize=(5, 5))
+    ax1.add_patch(plt.Polygon(grond_poly, facecolor='#e0e0e0', edgecolor='black', lw=2, label="Steen"))
+    
+    # Teken X-snedes
     for i, px in enumerate(pos_x):
-        y_m = l2 if (vorm_type=="Steen" or px<=dikte) else dikte
-        ax1.add_patch(plt.Rectangle((px, 0), zaag_dikte, y_m, facecolor='red', alpha=0.6))
-        txt = f"X{i+1}: {int(px)}" if px <= l1/2 else f"X{i+1}: {int(px)} ({int(l1-px)} van R)"
-        ax1.text(px, y_m+5, txt, color='red', weight='bold', fontsize=8, ha='center')
+        y_max = l2 if (vorm_type.startswith("Steen") or px <= dikte) else dikte
+        ax1.add_patch(plt.Rectangle((px, 0), zaag_dikte, y_max, color='red', alpha=0.7))
+        ax1.text(px + (zaag_dikte/2), y_max + 2, f"X{i+1}", color='red', ha='center', fontsize=9, weight='bold')
 
+    # Teken Y-snedes
     for i, py in enumerate(pos_y):
-        x_m = l1 if (vorm_type=="Steen" or py<=dikte) else dikte
-        ax1.add_patch(plt.Rectangle((0, py), x_m, zaag_dikte, facecolor='red', alpha=0.6))
-        txt = f"Y{i+1}: {int(py)}" if py <= l2/2 else f"Y{i+1}: {int(py)} ({int(l2-py)} van B)"
-        ax1.text(x_m+5, py, txt, color='red', weight='bold', fontsize=8, va='center')
+        x_max = l1 if (vorm_type.startswith("Steen") or py <= dikte) else dikte
+        ax1.add_patch(plt.Rectangle((0, py), x_max, zaag_dikte, color='red', alpha=0.7))
+        ax1.text(x_max + 2, py + (zaag_dikte/2), f"Y{i+1}", color='red', va='center', fontsize=9, weight='bold')
 
-    ax1.set_aspect('equal'); ax1.axis('off')
-    st.pyplot(fig1, dpi=80) # DPI fix tegen crashes [cite: 52]
+    ax1.set_aspect('equal')
+    ax1.axis('off')
+    st.pyplot(fig1)
 
-with col2:
-    st.subheader("3D Vlakken")
-    fig2 = plt.figure(); ax2 = fig2.add_subplot(111, projection='3d')
-    v_3d = np.array([ [p[0],p[1],0] for p in grond_poly ] + [ [p[0],p[1],h] for p in grond_poly ])
-    ax2.add_collection3d(Poly3DCollection([[v_3d[i] for i in idx] for idx in vlak_indices], facecolors='cyan', alpha=0.1, edgecolors='black'))
+# --- VISUALISATIE: 3D INTERACTIEF (PLOTLY) ---
+with col_right:
+    st.subheader("📦 3D Inspectie")
+    fig3d = go.Figure()
 
-    # X-VLAKKEN (Verticaal door de steen)
+    # De Steen/Hoek zelf
+    fig3d.add_trace(go.Mesh3d(
+        x=vertices[:,0], y=vertices[:,1], z=vertices[:,2],
+        i=indices[::3], j=indices[1::3], k=indices[2::3],
+        color='lightblue', opacity=0.5, name="Steen"
+    ))
+
+    # Zaagvlakken toevoegen (als boxen voor volume)
     for px in pos_x:
-        y_top = l2 if (vorm_type=="Steen" or px<=dikte) else dikte
-        vlak = [[px,0,0], [px+zaag_dikte,0,0], [px+zaag_dikte,y_top,h], [px,y_top,h]]
-        ax2.add_collection3d(Poly3DCollection([vlak], facecolors='red', alpha=0.7))
+        y_max = l2 if (vorm_type.startswith("Steen") or px <= dikte) else dikte
+        fig3d.add_trace(go.Mesh3d(
+            x=[px, px+zaag_dikte, px+zaag_dikte, px, px, px+zaag_dikte, px+zaag_dikte, px],
+            y=[0, 0, y_max, y_max, 0, 0, y_max, y_max],
+            z=[0, 0, 0, 0, h, h, h, h],
+            i=[0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7], j=[1, 2, 3, 3, 0, 1, 5, 6, 7, 7, 4, 5], k=[2, 3, 0, 1, 2, 3, 6, 7, 4, 5, 6, 7],
+            color='red', opacity=0.8, name=f"X-Cut"
+        ))
 
-    # Y-VLAKKEN (Horizontaal door de steen)
     for py in pos_y:
-        x_top = l1 if (vorm_type=="Steen" or py<=dikte) else dikte
-        vlak = [[0,py,0], [x_top,py,0], [x_top,py+zaag_dikte,h], [0,py+zaag_dikte,h]]
-        ax2.add_collection3d(Poly3DCollection([vlak], facecolors='red', alpha=0.7))
+        x_max = l1 if (vorm_type.startswith("Steen") or py <= dikte) else dikte
+        fig3d.add_trace(go.Mesh3d(
+            x=[0, x_max, x_max, 0, 0, x_max, x_max, 0],
+            y=[py, py, py+zaag_dikte, py+zaag_dikte, py, py, py+zaag_dikte, py+zaag_dikte],
+            z=[0, 0, 0, 0, h, h, h, h],
+            i=[0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7], j=[1, 2, 3, 3, 0, 1, 5, 6, 7, 7, 4, 5], k=[2, 3, 0, 1, 2, 3, 6, 7, 4, 5, 6, 7],
+            color='darkred', opacity=0.8, name=f"Y-Cut"
+        ))
 
-    ax2.set_xlim(0, max(l1,l2)); ax2.set_ylim(0, max(l1,l2)); ax2.set_zlim(0, max(l1,l2))
-    ax2.view_init(elev=25, azim=-45); ax2.axis('off')
-    st.pyplot(fig2, dpi=80)
+    fig3d.update_layout(
+        scene=dict(aspectmode='data', xaxis_title='L1 (mm)', yaxis_title='L2 (mm)', zaxis_title='H (mm)'),
+        margin=dict(l=0, r=0, b=0, t=0)
+    )
+    st.plotly_chart(fig3d, use_container_width=True)
+
+# --- OVERZICHTSTABEL ---
+st.divider()
+st.subheader("📊 Zaag Specificaties")
+data = {
+    "Onderdeel": [f"X{i+1}" for i in range(len(pos_x))] + [f"Y{i+1}" for i in range(len(pos_y))],
+    "Positie (mm)": pos_x + pos_y,
+    "Type": ["Verticaal (X)"] * len(pos_x) + ["Horizontaal (Y)"] * len(pos_y)
+}
+st.table(data)
