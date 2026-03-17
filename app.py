@@ -72,7 +72,7 @@ if rechts_actief: teken_snede(maat_rechts, "rechts")
 
 ax.set_aspect('equal')
 ax.axis('off')
-st.pyplot(fig)
+st.pyplot(fig, dpi=80)
 
 # Tabel met resultaten
 st.subheader("Resultaat Maten")
